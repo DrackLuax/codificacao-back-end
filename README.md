@@ -32,15 +32,7 @@ codificacao-back-end/
 │   ├── arquiteto-node-v8/
 │   ├── event-loop-microtasks/
 │   └── npm-package-json/
-│
-├── 📑 modulo-02-express-apis/
-│   ├── servidores-http/
-│   ├── roteamento-middlewares/
-│   └── padrao-rest-json/
-│
-└── 📑 modulo-03-persistencia-seguranca/
-    ├── manipulacao-fs-async/
-    └── autenticacao-jwt/
+
 ```
 
 ### Progresso das Aulas
@@ -67,28 +59,6 @@ Certifique-se de possuir em seu ambiente:
 * **Node.js** (v18.0.0 ou superior)
 * **NPM** instalado
 * **Git** configurado
-
-### Passo a Passo
-
-1. **Clonar o repositório:**
-   ```bash
-   git clone https://github.com/DrackLuax/codificacao-back-end.git
-   ```
-
-2. **Acessar o diretório:**
-   ```bash
-   cd codificacao-back-end
-   ```
-
-3. **Instalar dependências:**
-   ```bash
-   npm install
-   ```
-
-4. **Executar em ambiente de desenvolvimento:**
-   ```bash
-   npm run dev
-   ```
 
 
 ## 👨‍💻 Autor
