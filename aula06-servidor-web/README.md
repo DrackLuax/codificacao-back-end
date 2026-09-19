@@ -25,16 +25,16 @@
 
 ## 🎯 Visão Geral
 
-O **Servidor Sentinela** foi construído usando apenas o módulo interno `http` do Node.js — sem Express nem qualquer dependência externa. O objetivo é entender, na base, o que um framework como o Express abstrai: criação do servidor, interceptação de requisições, roteamento condicional e definição manual de cabeçalhos de resposta, incluindo hardening básico contra ataques comuns de camada web.
+O **Servidor Web** foi construído usando apenas o módulo interno `http` do Node.js — sem Express nem qualquer dependência externa. O objetivo é entender, na base, o que um framework como o Express abstrai: criação do servidor, interceptação de requisições, roteamento condicional e definição manual de cabeçalhos de resposta, incluindo hardening básico contra ataques comuns de camada web.
 
 ---
 
 ## 📁 Estrutura do Projeto
 
 ```text
-aula06-servidor-web-http/
+aula-06-servidor-web/
 ├── package.json    # Manifesto do projeto (ESM ativado)
-└── servidor.js     # Núcleo da aplicação: roteamento, headers e logs
+└── servidorWeb.js  # Núcleo da aplicação: roteamento, headers e logs
 ```
 
 ---
@@ -44,7 +44,7 @@ aula06-servidor-web-http/
 | Recurso | Descrição |
 | :--- | :--- |
 | **Módulo nativo `http`** | Criação e controle do servidor sem abstrações de terceiros |
-| **Logger de requisições** | Registra o método HTTP de cada requisição recebida no console |
+| **Logger de requisições** | Registra o método HTTP **e a rota** de cada requisição recebida no console |
 | **Headers de segurança** | Injeção estática de cabeçalhos contra MIME sniffing e clickjacking |
 | **Roteador manual** | Verificação condicional de `req.url` com resposta padronizada em JSON |
 
@@ -53,40 +53,59 @@ aula06-servidor-web-http/
 | **Node.js** | Runtime com sintaxe ESM (`import`/`export`) |
 | **http** | API nativa para gerenciar o ciclo de vida de requisição/resposta |
 
-### `servidor.js`
+### `package.json`
 
-```javascript
-import http from "http";
-
-const servidor = http.createServer((req, res) => {
-  console.log(`[LOG] Método recebido: ${req.method}`);
-
-  const cabecalhoPadrao = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-  };
-
-  if (req.url === "/status") {
-    res.writeHead(200, {
-      ...cabecalhoPadrao,
-      "Content-Type": "application/json",
-    });
-    res.end(JSON.stringify({ servidor: "Online" }));
-  } else {
-    res.writeHead(404, {
-      ...cabecalhoPadrao,
-      "Content-Type": "application/json",
-    });
-    res.end(JSON.stringify({ erro: "Página não encontrada" }));
-  }
-});
-
-servidor.listen(3000, () => {
-  console.log('Sentinela ativo na porta 3000');
-});
+```json
+{
+  "name": "aula-06-servidor-web",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Leonardo Picanço Queiroz Fontinele",
+  "license": "ISC",
+  "type": "module"
+}
 ```
 
-> ⚠️ **Nota:** no código original o `Content-Type` da resposta de erro estava grafado como `"aplication/json"` (faltando o segundo "p"). Corrigido acima para `"application/json"` — vale conferir no seu arquivo local.
+### `servidorWeb.js`
+
+```javascript
+import http from 'http';
+
+const servidorWeb = http.createServer((req, res) => {
+
+    console.log(`[LOG] Método Recebido: ${req.method} | Rota: ${req.url}`);
+
+    const cabecalhoPadrao = {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+    };
+
+    if (req.url === '/status') {
+        res.writeHead(200, {
+            ...cabecalhoPadrao,
+            'content-type': 'application/json'
+        });
+        res.end(JSON.stringify({ servidorWeb: 'Online' }));
+    } else {
+        res.writeHead(404, {
+            ...cabecalhoPadrao,
+            'content-type': 'application/json'
+        });
+        res.end(JSON.stringify({ erro: 'Página não encontrada!' }));
+    }
+
+});
+
+servidorWeb.listen(3000, () => {
+    console.log('Servidor Web ativo!');
+    console.log('Porta: 3000');
+});
+```
 
 ---
 
@@ -95,7 +114,7 @@ servidor.listen(3000, () => {
 Todas as respostas do servidor incluem os seguintes headers:
 
 ```http
-Content-Type: application/json
+content-type: application/json
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
 ```
@@ -111,8 +130,8 @@ X-Frame-Options: DENY
 
 | Método | Rota | Descrição | Status | Resposta |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/status` | Health check do serviço | `200 OK` | `{"servidor":"Online"}` |
-| `*` | qualquer outra rota | Fallback para rota não mapeada | `404 Not Found` | `{"erro":"Página não encontrada"}` |
+| `GET` | `/status` | Health check do serviço | `200 OK` | `{"servidorWeb":"Online"}` |
+| `*` | qualquer outra rota | Fallback para rota não mapeada | `404 Not Found` | `{"erro":"Página não encontrada!"}` |
 
 ---
 
@@ -121,13 +140,14 @@ X-Frame-Options: DENY
 Nenhuma dependência externa é necessária:
 
 ```bash
-node servidor.js
+node servidorWeb.js
 ```
 
 Saída esperada no console:
 
 ```text
-Sentinela ativo na porta 3000
+Servidor Web ativo!
+Porta: 3000
 ```
 
 ---
@@ -144,9 +164,9 @@ curl -i http://localhost:3000/status
 HTTP/1.1 200 OK
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Content-Type: application/json
+content-type: application/json
 
-{"servidor":"Online"}
+{"servidorWeb":"Online"}
 ```
 
 ### 2. Rota inexistente
@@ -159,9 +179,9 @@ curl -i http://localhost:3000/rota-invalida
 HTTP/1.1 404 Not Found
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Content-Type: application/json
+content-type: application/json
 
-{"erro":"Página não encontrada"}
+{"erro":"Página não encontrada!"}
 ```
 
 ---
