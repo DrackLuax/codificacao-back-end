@@ -1,0 +1,27 @@
+{
+    "nome":"Leonardo Queiroz",
+    "nomeSocial":"",
+    "matricula":"2026TISENAI02",
+    "dataNascimento":"2007-10-02",
+    "curso":"Técnico em Desenvolvimento de Sistemas",
+    "disciplinas":[
+        {"nome":"Banco de dados", "nota": 9.5},
+        {"nome":"Desenvolvimento WEB", "nota": 8.8}
+    ],
+    "endereco":[{
+        "rua":"Avenida Antônio Carlos Reis",
+        "numero":2192,
+        "bairro":"Novo Horizonte",
+        "cidade":"Macapá",
+        "estado":"Amapá",
+        "cep":"68909816"
+    },
+    {
+        "rua":"Avenida Antônio Carlos Reis",
+        "numero":2192,
+        "bairro":"Novo Horizonte",
+        "cidade":"Macapá",
+        "estado":"Amapá",
+        "cep":"68909816"
+    }]
+}
