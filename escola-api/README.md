@@ -1,6 +1,6 @@
 # Escola API
 
-API REST para gerenciamento de alunos, construída com **NestJS**, **MongoDB** (Mongoose) e validação de dados com **class-validator**.
+API REST para gerenciamento de alunos, construída com **NestJS**, **MongoDB** (Mongoose), validação de dados com **class-validator** e documentação interativa com **Swagger**.
 
 ## Tecnologias
 
@@ -8,6 +8,7 @@ API REST para gerenciamento de alunos, construída com **NestJS**, **MongoDB** (
 - [TypeScript](https://www.typescriptlang.org/)
 - [MongoDB](https://www.mongodb.com/) com [Mongoose](https://mongoosejs.com/) (`@nestjs/mongoose`)
 - [class-validator](https://github.com/typestack/class-validator) e class-transformer: validação dos dados de entrada
+- [Swagger](https://swagger.io/) (`@nestjs/swagger`): documentação interativa da API
 - [Vitest](https://vitest.dev/): testes unitários e e2e
 - [Oxlint](https://oxc.rs/docs/guide/usage/linter) e Prettier: lint e formatação
 
@@ -50,6 +51,16 @@ npm run start:prod
 
 A API ficará disponível em `http://localhost:3000`.
 
+## Documentação (Swagger)
+
+Com a aplicação rodando, a documentação interativa fica em:
+
+```
+http://localhost:3000/docs
+```
+
+Por ela é possível consultar todas as rotas, ver os campos esperados (com exemplos) e executar as requisições direto no navegador.
+
 ## Estrutura do projeto
 
 ```
@@ -57,13 +68,13 @@ escola-api/
 ├── src/
 │   ├── alunos/
 │   │   ├── dto/
-│   │   │   ├── create-aluno.dto.ts     # validações para criar aluno
+│   │   │   ├── create-aluno.dto.ts     # validações e exemplos (Swagger) para criar aluno
 │   │   │   └── update-aluno.dto.ts     # dados para atualizar aluno
 │   │   ├── schemas/
 │   │   │   └── aluno.schema.ts         # modelo do MongoDB
-│   │   ├── aluno.controller.ts         # rotas HTTP
+│   │   ├── aluno.controller.ts         # rotas HTTP e documentação Swagger
 │   │   ├── alunos.module.ts            # módulo de alunos
-│   │   └── alunos.service.ts           # regras de negócio (CRUD)
+│   │   └── alunos.service.ts           # regras de negócio (CRUD e paginação)
 │   ├── app.module.ts                   # módulo raiz e conexão com o banco
 │   └── main.ts                         # ponto de entrada da aplicação
 ├── test/                               # testes e2e
@@ -76,26 +87,26 @@ escola-api/
 
 Coleção `alunos`:
 
-| Campo       | Tipo       | Obrigatório | Observações                      |
-| ----------- | ---------- | :---------: | -------------------------------- |
-| `nome`      | `string`   | Sim         | Não pode ser vazio               |
-| `idade`     | `number`   | Sim         | Inteiro, mínimo `0`              |
-| `matricula` | `string`   | Sim         | **Única** no banco               |
+| Campo       | Tipo       | Obrigatório | Observações                       |
+| ----------- | ---------- | :---------: | --------------------------------- |
+| `nome`      | `string`   | Sim         | Não pode ser vazio                |
+| `idade`     | `number`   | Sim         | Inteiro, mínimo `0`               |
+| `matricula` | `string`   | Sim         | **Única** no banco                |
 | `cursos`    | `string[]` | Sim         | Pelo menos 1 curso, cada um texto |
 
 ## Endpoints
 
 Base: `/alunos`
 
-| Método   | Rota          | Descrição                    |
-| -------- | ------------- | ---------------------------- |
-| `POST`   | `/alunos`     | Cria um aluno                |
-| `GET`    | `/alunos`     | Lista todos os alunos        |
-| `GET`    | `/alunos/:id` | Busca um aluno pelo ID       |
-| `PATCH`  | `/alunos/:id` | Atualiza um aluno            |
-| `DELETE` | `/alunos/:id` | Remove um aluno              |
+| Método   | Rota          | Descrição                                |
+| -------- | ------------- | ---------------------------------------- |
+| `POST`   | `/alunos`     | Cria um aluno                            |
+| `GET`    | `/alunos`     | Lista os alunos com paginação            |
+| `GET`    | `/alunos/:id` | Busca um aluno pelo ID                   |
+| `PATCH`  | `/alunos/:id` | Atualiza um aluno                        |
+| `DELETE` | `/alunos/:id` | Remove um aluno                          |
 
-### Exemplo de requisição
+### Criar aluno
 
 `POST /alunos`
 
@@ -121,13 +132,48 @@ Resposta (`201 Created`):
 }
 ```
 
+### Listar alunos com paginação
+
+`GET /alunos?page=1&limit=10`
+
+| Parâmetro | Tipo     | Obrigatório | Padrão | Descrição                |
+| --------- | -------- | :---------: | :----: | ------------------------ |
+| `page`    | `number` | Não         | `1`    | Número da página         |
+| `limit`   | `number` | Não         | `10`   | Quantidade de itens por página |
+
+Resposta (`200 OK`):
+
+```json
+{
+  "data": [
+    {
+      "_id": "6650f1c2a1b2c3d4e5f67890",
+      "nome": "Leonardo Queiroz",
+      "idade": 18,
+      "matricula": "2026TISENAI02",
+      "cursos": ["Banco de dados", "Desenvolvimento WEB"],
+      "__v": 0
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+Quando não há alunos cadastrados, a resposta continua sendo `200 OK`, com `data` vazio e `total` igual a `0`.
+
 ### Erros comuns
 
-| Status | Quando acontece                                                        |
-| ------ | ---------------------------------------------------------------------- |
+| Status | Quando acontece                                                          |
+| ------ | ------------------------------------------------------------------------ |
 | `400`  | Dados inválidos (ex.: nome vazio, idade negativa, lista de cursos vazia) |
-| `400`  | Campos que não existem no DTO foram enviados                           |
-| `404`  | Aluno com o ID informado não foi encontrado                            |
+| `400`  | Campos que não existem no DTO foram enviados                             |
+| `400`  | `page` ou `limit` não são números inteiros                               |
+| `404`  | Aluno com o ID informado não foi encontrado                              |
 
 Exemplo de erro de validação:
 
@@ -147,6 +193,8 @@ O `ValidationPipe` global (em `src/main.ts`) está configurado com:
 - `forbidNonWhitelisted: true`: retorna erro `400` se campos extras forem enviados
 - `transform: true`: converte o body para a instância do DTO
 
+Na listagem, os parâmetros `page` e `limit` são validados com `ParseIntPipe` e recebem valores padrão com `DefaultValuePipe`.
+
 ## Testes
 
 ```bash
@@ -159,13 +207,13 @@ npm run test:e2e
 
 ## Scripts úteis
 
-| Script              | Descrição                         |
-| ------------------- | --------------------------------- |
-| `npm run start:dev` | Inicia em modo desenvolvimento    |
-| `npm run build`     | Compila o projeto para `dist/`    |
-| `npm run start:prod`| Executa a versão compilada        |
-| `npm run test`      | Executa os testes unitários       |
-| `npm run test:e2e`  | Executa os testes e2e             |
+| Script               | Descrição                      |
+| -------------------- | ------------------------------ |
+| `npm run start:dev`  | Inicia em modo desenvolvimento |
+| `npm run build`      | Compila o projeto para `dist/` |
+| `npm run start:prod` | Executa a versão compilada     |
+| `npm run test`       | Executa os testes unitários    |
+| `npm run test:e2e`   | Executa os testes e2e          |
 
 ## Autor
 
