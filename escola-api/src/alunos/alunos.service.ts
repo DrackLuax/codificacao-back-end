@@ -9,11 +9,6 @@ import { Aluno, AlunoDoc } from "./schemas/aluno.schema.js";
 @Injectable()
 export class AlunosService {
     constructor(@InjectModel(Aluno.name) private alunoModel: Model<AlunoDoc>) {}
-    //!CLUD
-    //! C - Create (Criar)
-    //! R - Read (Ler/Cosultar)
-    //! U - Update (Atualizar)
-    //! D - Delete (Apagar)
 
     async create(createAlunoDto: CreateAlunoDto): Promise<Aluno>{
         const createAluno = new this.alunoModel(createAlunoDto);
@@ -25,11 +20,23 @@ export class AlunosService {
     // }
 
     //! Método para buscar os alunos com paginação
-    async findPage(page: number, limit: number){
+    async findPage(page: number, limit: number, nome?: string, curso?: string){
         const skip = (page - 1) * limit;
+        const filter: any = {};
+
+        if(nome){
+            filter.nome = {
+                $regex: new RegExp(nome, 'i'),
+            };
+        }
+
+        if(curso){
+            filter.cursos = curso;
+        }
+
         const [data, total] = await Promise.all([
-            this.alunoModel.find().skip(skip).limit(limit).exec(),
-            this.alunoModel.countDocuments().exec(),
+            this.alunoModel.find(filter).skip(skip).limit(limit).exec(),
+            this.alunoModel.countDocuments(filter).exec(),
         ]);
         return {
             data,
