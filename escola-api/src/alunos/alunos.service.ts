@@ -5,70 +5,84 @@ import { CreateAlunoDto } from "./dto/create-aluno.dto.js";
 import { UpdateAlunoDto } from "./dto/update-aluno.dto.js";
 import { Aluno, AlunoDoc } from "./schemas/aluno.schema.js";
 
+const CAMPOS_ORDENACAO = ['nome', 'idade', 'matricula'];
 
 @Injectable()
 export class AlunosService {
     constructor(@InjectModel(Aluno.name) private alunoModel: Model<AlunoDoc>) {}
 
-    async create(createAlunoDto: CreateAlunoDto): Promise<Aluno>{
+    async create(createAlunoDto: CreateAlunoDto): Promise<Aluno> {
         const createAluno = new this.alunoModel(createAlunoDto);
         return createAluno.save();
     }
 
-    // async findAll(): Promise <Aluno[]>{
-    //     return this.alunoModel.find().exec();
-    // }
+    //! Método para buscar os alunos com paginação, filtros e ordenação
+    async findPagefilter(
+        page: number,
+        limit: number,
+        nome?: string,
+        curso?: string,
+        orderBy?: string,
+        orderDirection?: 'asc' | 'desc',
+    ) {
+        const paginaAtual = Math.max(page, 1);
+        const itensPorPagina = Math.min(Math.max(limit, 1), 100);
+        const skip = (paginaAtual - 1) * itensPorPagina;
 
-    //! Método para buscar os alunos com paginação
-    async findPage(page: number, limit: number, nome?: string, curso?: string){
-        const skip = (page - 1) * limit;
-        const filter: any = {};
+        const filter: Record<string, any> = {};
+        const sort: Record<string, 1 | -1> = {};
 
-        if(nome){
-            filter.nome = {
-                $regex: new RegExp(nome, 'i'),
-            };
+        if (nome) {
+            const nomeEscapado = nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.nome = { $regex: new RegExp(nomeEscapado, 'i') };
         }
 
-        if(curso){
+        if (curso) {
             filter.cursos = curso;
         }
 
+        if (orderBy && CAMPOS_ORDENACAO.includes(orderBy)) {
+            sort[orderBy] = orderDirection === 'desc' ? -1 : 1;
+        }
+
         const [data, total] = await Promise.all([
-            this.alunoModel.find(filter).skip(skip).limit(limit).exec(),
+            this.alunoModel.find(filter).sort(sort).skip(skip).limit(itensPorPagina).exec(),
             this.alunoModel.countDocuments(filter).exec(),
         ]);
+
         return {
             data,
-            meta:{
+            meta: {
                 total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
+                page: paginaAtual,
+                limit: itensPorPagina,
+                totalPages: Math.ceil(total / itensPorPagina),
             },
         };
     }
-    
-    async findOne(id: string): Promise <Aluno>{
-       const aluno = await this.alunoModel.findById(id).exec();
-       if(!aluno){
-        throw new NotFoundException(`Aluno com ID ${id} não encontrado.`);
-       }
-       return aluno;
+
+    async findOne(id: string): Promise<Aluno> {
+        const aluno = await this.alunoModel.findById(id).exec();
+        if (!aluno) {
+            throw new NotFoundException(`Aluno com ID ${id} não encontrado.`);
+        }
+        return aluno;
     }
 
-    async update(id: string, updateAlunoDto: UpdateAlunoDto):Promise<Aluno>{
-        const alunoAtualizado = await this.alunoModel.findByIdAndUpdate(id, updateAlunoDto,{
-            new: true }).exec();
-            if(!alunoAtualizado){
-                throw new NotFoundException(`Aluno com ID ${id} não encontrado.`);
-            }
-            return alunoAtualizado;
+    async update(id: string, updateAlunoDto: UpdateAlunoDto): Promise<Aluno> {
+        const alunoAtualizado = await this.alunoModel
+            .findByIdAndUpdate(id, updateAlunoDto, { new: true })
+            .exec();
+        if (!alunoAtualizado) {
+            throw new NotFoundException(`Aluno com ID ${id} não encontrado.`);
+        }
+        return alunoAtualizado;
     }
-    async remove(id: string): Promise<Aluno>{
+
+    async remove(id: string): Promise<Aluno> {
         const alunoRemovido = await this.alunoModel.findByIdAndDelete(id).exec();
-        if(!alunoRemovido){
-            throw new NotFoundException(`Aluno com ID ${id} não encontrado.`)
+        if (!alunoRemovido) {
+            throw new NotFoundException(`Aluno com ID ${id} não encontrado.`);
         }
         return alunoRemovido;
     }
