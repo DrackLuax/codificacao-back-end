@@ -74,7 +74,7 @@ escola-api/
 │   │   │   └── aluno.schema.ts         # modelo do MongoDB
 │   │   ├── aluno.controller.ts         # rotas HTTP e documentação Swagger
 │   │   ├── alunos.module.ts            # módulo de alunos
-│   │   └── alunos.service.ts           # regras de negócio (CRUD, filtros, ordenação e paginação)
+│   │   └── alunos.service.ts           # regras de negócio (CRUD, filtros, ordenação, paginação e soft delete)
 │   ├── app.module.ts                   # módulo raiz e conexão com o banco
 │   └── main.ts                         # ponto de entrada da aplicação
 ├── test/                               # testes e2e
@@ -87,24 +87,26 @@ escola-api/
 
 Coleção `alunos`:
 
-| Campo       | Tipo       | Obrigatório | Observações                       |
-| ----------- | ---------- | :---------: | --------------------------------- |
-| `nome`      | `string`   | Sim         | Não pode ser vazio                |
-| `idade`     | `number`   | Sim         | Inteiro, mínimo `0`               |
-| `matricula` | `string`   | Sim         | **Única** no banco                |
-| `cursos`    | `string[]` | Sim         | Pelo menos 1 curso, cada um texto |
+| Campo       | Tipo       | Obrigatório | Observações                                                |
+| ----------- | ---------- | :---------: | ---------------------------------------------------------- |
+| `nome`      | `string`   | Sim         | Não pode ser vazio                                         |
+| `idade`     | `number`   | Sim         | Inteiro, mínimo `0`                                        |
+| `matricula` | `string`   | Sim         | **Única** no banco                                         |
+| `cursos`    | `string[]` | Sim         | Pelo menos 1 curso, cada um texto                          |
+| `ativo`     | `boolean`  | Não         | Padrão `true`. Vira `false` quando o aluno é removido      |
 
 ## Endpoints
 
 Base: `/alunos`
 
-| Método   | Rota          | Descrição                                              |
-| -------- | ------------- | ------------------------------------------------------ |
-| `POST`   | `/alunos`     | Cria um aluno                                          |
-| `GET`    | `/alunos`     | Lista alunos com paginação, filtros e ordenação        |
-| `GET`    | `/alunos/:id` | Busca um aluno pelo ID                                 |
-| `PATCH`  | `/alunos/:id` | Atualiza um aluno                                      |
-| `DELETE` | `/alunos/:id` | Remove um aluno                                        |
+| Método   | Rota                      | Descrição                                                  |
+| -------- | ------------------------- | ---------------------------------------------------------- |
+| `POST`   | `/alunos`                 | Cria um aluno                                              |
+| `GET`    | `/alunos`                 | Lista alunos ativos com paginação, filtros e ordenação     |
+| `GET`    | `/alunos/:id`             | Busca um aluno ativo pelo ID                               |
+| `PATCH`  | `/alunos/:id`             | Atualiza um aluno                                          |
+| `DELETE` | `/alunos/:id`             | Remove o aluno (soft delete: apenas desativa)              |
+| `PATCH`  | `/alunos/:id/restaurar`   | Restaura um aluno removido                                 |
 
 ### Criar aluno
 
@@ -128,6 +130,7 @@ Resposta (`201 Created`):
   "idade": 18,
   "matricula": "2026TISENAI02",
   "cursos": ["Banco de dados", "Desenvolvimento WEB"],
+  "ativo": true,
   "__v": 0
 }
 ```
@@ -146,7 +149,7 @@ Como a `matricula` é única, cadastrar um segundo aluno com a mesma matrícula 
 
 `GET /alunos`
 
-Todos os parâmetros são opcionais:
+Retorna **apenas alunos ativos**. Todos os parâmetros são opcionais:
 
 | Parâmetro        | Tipo     | Padrão | Descrição                                                         |
 | ---------------- | -------- | :----: | ----------------------------------------------------------------- |
@@ -174,6 +177,7 @@ Resposta (`200 OK`):
       "idade": 18,
       "matricula": "2026TISENAI02",
       "cursos": ["Banco de dados", "Desenvolvimento WEB"],
+      "ativo": true,
       "__v": 0
     }
   ],
@@ -188,6 +192,34 @@ Resposta (`200 OK`):
 
 O campo `total` considera os filtros aplicados. Quando nenhum aluno é encontrado, a resposta continua sendo `200 OK`, com `data` vazio e `total` igual a `0`.
 
+### Remover e restaurar (soft delete)
+
+A remoção **não apaga** o registro do banco: o aluno apenas recebe `ativo: false` e deixa de aparecer na listagem e na busca por ID.
+
+`DELETE /alunos/:id`
+
+Resposta (`200 OK`):
+
+```json
+{
+  "_id": "6650f1c2a1b2c3d4e5f67890",
+  "nome": "Leonardo Queiroz",
+  "idade": 18,
+  "matricula": "2026TISENAI02",
+  "cursos": ["Banco de dados", "Desenvolvimento WEB"],
+  "ativo": false,
+  "__v": 0
+}
+```
+
+Para reativar o aluno:
+
+`PATCH /alunos/:id/restaurar`
+
+Resposta (`200 OK`): o mesmo documento, agora com `"ativo": true`.
+
+> A matrícula de um aluno removido continua reservada. Tentar cadastrar outro aluno com a mesma matrícula retorna `409 Conflict` até que o registro seja apagado definitivamente do banco.
+
 ### Erros comuns
 
 | Status | Quando acontece                                                          |
@@ -195,7 +227,8 @@ O campo `total` considera os filtros aplicados. Quando nenhum aluno é encontrad
 | `400`  | Dados inválidos (ex.: nome vazio, idade negativa, lista de cursos vazia) |
 | `400`  | Campos que não existem no DTO foram enviados                             |
 | `400`  | `page` ou `limit` não são números inteiros                               |
-| `404`  | Aluno com o ID informado não foi encontrado                              |
+| `404`  | Aluno com o ID informado não foi encontrado (ou está removido, na busca por ID) |
+| `404`  | Restauração de um ID que não existe                                      |
 | `409`  | Já existe um aluno cadastrado com a mesma matrícula                      |
 | `500`  | Falha inesperada ao processar o cadastro do aluno                        |
 
@@ -226,7 +259,7 @@ O cadastro captura as falhas do MongoDB no `AlunosService`:
 - Erro de chave duplicada (código `11000`, matrícula repetida): vira `ConflictException` (`409`).
 - Qualquer outra falha ao salvar: vira `InternalServerErrorException` (`500`).
 
-As buscas, atualizações e remoções lançam `NotFoundException` (`404`) quando o ID não existe.
+As buscas, atualizações, remoções e restaurações lançam `NotFoundException` (`404`) quando o ID não existe.
 
 ## Testes
 
