@@ -74,7 +74,7 @@ escola-api/
 │   │   │   └── aluno.schema.ts         # modelo do MongoDB
 │   │   ├── aluno.controller.ts         # rotas HTTP e documentação Swagger
 │   │   ├── alunos.module.ts            # módulo de alunos
-│   │   └── alunos.service.ts           # regras de negócio (CRUD e paginação)
+│   │   └── alunos.service.ts           # regras de negócio (CRUD, filtros, ordenação e paginação)
 │   ├── app.module.ts                   # módulo raiz e conexão com o banco
 │   └── main.ts                         # ponto de entrada da aplicação
 ├── test/                               # testes e2e
@@ -98,13 +98,13 @@ Coleção `alunos`:
 
 Base: `/alunos`
 
-| Método   | Rota          | Descrição                                |
-| -------- | ------------- | ---------------------------------------- |
-| `POST`   | `/alunos`     | Cria um aluno                            |
-| `GET`    | `/alunos`     | Lista os alunos com paginação            |
-| `GET`    | `/alunos/:id` | Busca um aluno pelo ID                   |
-| `PATCH`  | `/alunos/:id` | Atualiza um aluno                        |
-| `DELETE` | `/alunos/:id` | Remove um aluno                          |
+| Método   | Rota          | Descrição                                              |
+| -------- | ------------- | ------------------------------------------------------ |
+| `POST`   | `/alunos`     | Cria um aluno                                          |
+| `GET`    | `/alunos`     | Lista alunos com paginação, filtros e ordenação        |
+| `GET`    | `/alunos/:id` | Busca um aluno pelo ID                                 |
+| `PATCH`  | `/alunos/:id` | Atualiza um aluno                                      |
+| `DELETE` | `/alunos/:id` | Remove um aluno                                        |
 
 ### Criar aluno
 
@@ -132,14 +132,36 @@ Resposta (`201 Created`):
 }
 ```
 
-### Listar alunos com paginação
+Como a `matricula` é única, cadastrar um segundo aluno com a mesma matrícula retorna `409 Conflict`:
 
-`GET /alunos?page=1&limit=10`
+```json
+{
+  "message": "Já existe um aluno cadastrado com essa matricula",
+  "error": "Conflict",
+  "statusCode": 409
+}
+```
 
-| Parâmetro | Tipo     | Obrigatório | Padrão | Descrição                |
-| --------- | -------- | :---------: | :----: | ------------------------ |
-| `page`    | `number` | Não         | `1`    | Número da página         |
-| `limit`   | `number` | Não         | `10`   | Quantidade de itens por página |
+### Listar alunos
+
+`GET /alunos`
+
+Todos os parâmetros são opcionais:
+
+| Parâmetro        | Tipo     | Padrão | Descrição                                                         |
+| ---------------- | -------- | :----: | ----------------------------------------------------------------- |
+| `page`           | `number` | `1`    | Número da página                                                  |
+| `limit`          | `number` | `10`   | Quantidade de itens por página                                    |
+| `nome`           | `string` | —      | Filtra pelo nome (contém o texto, sem diferenciar maiúsculas)     |
+| `curso`          | `string` | —      | Filtra alunos matriculados no curso informado (nome exato)        |
+| `orderBy`        | `string` | —      | Campo usado na ordenação: `nome`, `idade` ou `matricula`          |
+| `orderDirection` | `string` | `asc`  | `asc` para crescente e `desc` para decrescente                    |
+
+Exemplo:
+
+```
+GET /alunos?page=1&limit=5&nome=leo&curso=Banco%20de%20dados&orderBy=nome&orderDirection=asc
+```
 
 Resposta (`200 OK`):
 
@@ -158,13 +180,13 @@ Resposta (`200 OK`):
   "meta": {
     "total": 1,
     "page": 1,
-    "limit": 10,
+    "limit": 5,
     "totalPages": 1
   }
 }
 ```
 
-Quando não há alunos cadastrados, a resposta continua sendo `200 OK`, com `data` vazio e `total` igual a `0`.
+O campo `total` considera os filtros aplicados. Quando nenhum aluno é encontrado, a resposta continua sendo `200 OK`, com `data` vazio e `total` igual a `0`.
 
 ### Erros comuns
 
@@ -174,6 +196,8 @@ Quando não há alunos cadastrados, a resposta continua sendo `200 OK`, com `dat
 | `400`  | Campos que não existem no DTO foram enviados                             |
 | `400`  | `page` ou `limit` não são números inteiros                               |
 | `404`  | Aluno com o ID informado não foi encontrado                              |
+| `409`  | Já existe um aluno cadastrado com a mesma matrícula                      |
+| `500`  | Falha inesperada ao processar o cadastro do aluno                        |
 
 Exemplo de erro de validação:
 
@@ -194,6 +218,15 @@ O `ValidationPipe` global (em `src/main.ts`) está configurado com:
 - `transform: true`: converte o body para a instância do DTO
 
 Na listagem, os parâmetros `page` e `limit` são validados com `ParseIntPipe` e recebem valores padrão com `DefaultValuePipe`.
+
+## Tratamento de erros
+
+O cadastro captura as falhas do MongoDB no `AlunosService`:
+
+- Erro de chave duplicada (código `11000`, matrícula repetida): vira `ConflictException` (`409`).
+- Qualquer outra falha ao salvar: vira `InternalServerErrorException` (`500`).
+
+As buscas, atualizações e remoções lançam `NotFoundException` (`404`) quando o ID não existe.
 
 ## Testes
 
