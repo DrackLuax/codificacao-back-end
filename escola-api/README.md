@@ -9,6 +9,8 @@ API REST para gerenciamento de alunos, construída com **NestJS**, **MongoDB** (
 - [MongoDB](https://www.mongodb.com/) com [Mongoose](https://mongoosejs.com/) (`@nestjs/mongoose`)
 - [class-validator](https://github.com/typestack/class-validator) e class-transformer: validação dos dados de entrada
 - [Swagger](https://swagger.io/) (`@nestjs/swagger`): documentação interativa da API
+- [Faker](https://fakerjs.dev/) (`@faker-js/faker`): geração de dados fictícios para testes
+- [tsx](https://tsx.is/): execução de scripts TypeScript (usado no seed)
 - [Vitest](https://vitest.dev/): testes unitários e e2e
 - [Oxlint](https://oxc.rs/docs/guide/usage/linter) e Prettier: lint e formatação
 
@@ -61,6 +63,47 @@ http://localhost:3000/docs
 
 Por ela é possível consultar todas as rotas, ver os campos esperados (com exemplos) e executar as requisições direto no navegador.
 
+## Popular o banco com dados de teste (seed)
+
+O script `src/seeding.ts` gera alunos fictícios com o `@faker-js/faker` (em português do Brasil) e os cadastra pelo `AlunosService`. Assim, os dados passam pelas mesmas regras da API, como a matrícula única.
+
+Com o MongoDB rodando, execute:
+
+```bash
+npm run bf67
+```
+
+Cada execução faz **150 tentativas** de cadastro, com os seguintes dados:
+
+| Campo       | Valor gerado                                                      |
+| ----------- | ----------------------------------------------------------------- |
+| `nome`      | Nome completo aleatório em português                              |
+| `idade`     | Número inteiro entre `16` e `65`                                  |
+| `matricula` | 5 dígitos numéricos aleatórios                                    |
+| `cursos`    | De 1 a 3 cursos sorteados de uma lista de 11 cursos               |
+| `ativo`     | `true`                                                            |
+
+Se a matrícula sorteada já existir, o registro é ignorado com a mensagem `Pular: Erro ao Criar Matrícula para <nome>! - Matrícula Duplicada`, e o script continua.
+
+Saída esperada:
+
+```text
+🌱 Iniciando a Geração de Faker Alunos...
+✅ Banco de Dados Populado com Sucesso!
+```
+
+Observações:
+
+- **O seed não limpa o banco.** Cada execução acrescenta novos alunos aos que já existem. Para começar do zero, apague a coleção antes:
+
+```bash
+mongosh
+use escola_dbn
+db.alunos.deleteMany({})
+```
+
+- **Por que `tsx`?** O projeto usa ES Modules (`"type": "module"`) e importa arquivos com a extensão `.js`, o que o `ts-node` não resolve. O `tsx` resolve, mas não emite os metadados dos decorators. Por isso cada `@Prop` do schema declara o `type` de forma explícita.
+
 ## Estrutura do projeto
 
 ```
@@ -76,7 +119,8 @@ escola-api/
 │   │   ├── alunos.module.ts            # módulo de alunos
 │   │   └── alunos.service.ts           # regras de negócio (CRUD, filtros, ordenação, paginação e soft delete)
 │   ├── app.module.ts                   # módulo raiz e conexão com o banco
-│   └── main.ts                         # ponto de entrada da aplicação
+│   ├── main.ts                         # ponto de entrada da aplicação
+│   └── seeding.ts                      # script que popula o banco com alunos fictícios
 ├── test/                               # testes e2e
 ├── vitest.config.ts
 ├── vitest.config.e2e.ts
@@ -87,26 +131,28 @@ escola-api/
 
 Coleção `alunos`:
 
-| Campo       | Tipo       | Obrigatório | Observações                                                |
-| ----------- | ---------- | :---------: | ---------------------------------------------------------- |
-| `nome`      | `string`   | Sim         | Não pode ser vazio                                         |
-| `idade`     | `number`   | Sim         | Inteiro, mínimo `0`                                        |
-| `matricula` | `string`   | Sim         | **Única** no banco                                         |
-| `cursos`    | `string[]` | Sim         | Pelo menos 1 curso, cada um texto                          |
-| `ativo`     | `boolean`  | Não         | Padrão `true`. Vira `false` quando o aluno é removido      |
+| Campo       | Tipo       | Obrigatório | Observações                                           |
+| ----------- | ---------- | :---------: | ----------------------------------------------------- |
+| `nome`      | `string`   | Sim         | Não pode ser vazio                                    |
+| `idade`     | `number`   | Sim         | Inteiro, mínimo `0`                                   |
+| `matricula` | `string`   | Sim         | **Única** no banco                                    |
+| `cursos`    | `string[]` | Sim         | Pelo menos 1 curso, cada um texto                     |
+| `ativo`     | `boolean`  | Não         | Padrão `true`. Vira `false` quando o aluno é removido |
+| `createdAt` | `Date`     | Automático  | Data de criação do registro                           |
+| `updatedAt` | `Date`     | Automático  | Data da última atualização do registro                |
 
 ## Endpoints
 
 Base: `/alunos`
 
-| Método   | Rota                      | Descrição                                                  |
-| -------- | ------------------------- | ---------------------------------------------------------- |
-| `POST`   | `/alunos`                 | Cria um aluno                                              |
-| `GET`    | `/alunos`                 | Lista alunos ativos com paginação, filtros e ordenação     |
-| `GET`    | `/alunos/:id`             | Busca um aluno ativo pelo ID                               |
-| `PATCH`  | `/alunos/:id`             | Atualiza um aluno                                          |
-| `DELETE` | `/alunos/:id`             | Remove o aluno (soft delete: apenas desativa)              |
-| `PATCH`  | `/alunos/:id/restaurar`   | Restaura um aluno removido                                 |
+| Método   | Rota                    | Descrição                                              |
+| -------- | ----------------------- | ------------------------------------------------------ |
+| `POST`   | `/alunos`               | Cria um aluno                                          |
+| `GET`    | `/alunos`               | Lista alunos ativos com paginação, filtros e ordenação |
+| `GET`    | `/alunos/:id`           | Busca um aluno ativo pelo ID                           |
+| `PATCH`  | `/alunos/:id`           | Atualiza um aluno                                      |
+| `DELETE` | `/alunos/:id`           | Remove o aluno (soft delete: apenas desativa)          |
+| `PATCH`  | `/alunos/:id/restaurar` | Restaura um aluno removido                             |
 
 ### Criar aluno
 
@@ -131,6 +177,8 @@ Resposta (`201 Created`):
   "matricula": "2026TISENAI02",
   "cursos": ["Banco de dados", "Desenvolvimento WEB"],
   "ativo": true,
+  "createdAt": "2026-11-17T23:45:10.123Z",
+  "updatedAt": "2026-11-17T23:45:10.123Z",
   "__v": 0
 }
 ```
@@ -151,14 +199,14 @@ Como a `matricula` é única, cadastrar um segundo aluno com a mesma matrícula 
 
 Retorna **apenas alunos ativos**. Todos os parâmetros são opcionais:
 
-| Parâmetro        | Tipo     | Padrão | Descrição                                                         |
-| ---------------- | -------- | :----: | ----------------------------------------------------------------- |
-| `page`           | `number` | `1`    | Número da página                                                  |
-| `limit`          | `number` | `10`   | Quantidade de itens por página                                    |
-| `nome`           | `string` | —      | Filtra pelo nome (contém o texto, sem diferenciar maiúsculas)     |
-| `curso`          | `string` | —      | Filtra alunos matriculados no curso informado (nome exato)        |
-| `orderBy`        | `string` | —      | Campo usado na ordenação: `nome`, `idade` ou `matricula`          |
-| `orderDirection` | `string` | `asc`  | `asc` para crescente e `desc` para decrescente                    |
+| Parâmetro        | Tipo     | Padrão | Descrição                                                     |
+| ---------------- | -------- | :----: | ------------------------------------------------------------- |
+| `page`           | `number` | `1`    | Número da página                                              |
+| `limit`          | `number` | `10`   | Quantidade de itens por página                                |
+| `nome`           | `string` | —      | Filtra pelo nome (contém o texto, sem diferenciar maiúsculas) |
+| `curso`          | `string` | —      | Filtra alunos matriculados no curso informado (nome exato)    |
+| `orderBy`        | `string` | —      | Campo usado na ordenação: `nome`, `idade` ou `matricula`      |
+| `orderDirection` | `string` | `asc`  | `asc` para crescente e `desc` para decrescente                |
 
 Exemplo:
 
@@ -178,6 +226,8 @@ Resposta (`200 OK`):
       "matricula": "2026TISENAI02",
       "cursos": ["Banco de dados", "Desenvolvimento WEB"],
       "ativo": true,
+      "createdAt": "2026-11-17T23:45:10.123Z",
+      "updatedAt": "2026-11-17T23:45:10.123Z",
       "__v": 0
     }
   ],
@@ -208,6 +258,8 @@ Resposta (`200 OK`):
   "matricula": "2026TISENAI02",
   "cursos": ["Banco de dados", "Desenvolvimento WEB"],
   "ativo": false,
+  "createdAt": "2026-11-17T23:45:10.123Z",
+  "updatedAt": "2026-11-17T23:50:42.508Z",
   "__v": 0
 }
 ```
@@ -222,15 +274,15 @@ Resposta (`200 OK`): o mesmo documento, agora com `"ativo": true`.
 
 ### Erros comuns
 
-| Status | Quando acontece                                                          |
-| ------ | ------------------------------------------------------------------------ |
-| `400`  | Dados inválidos (ex.: nome vazio, idade negativa, lista de cursos vazia) |
-| `400`  | Campos que não existem no DTO foram enviados                             |
-| `400`  | `page` ou `limit` não são números inteiros                               |
+| Status | Quando acontece                                                                 |
+| ------ | ------------------------------------------------------------------------------- |
+| `400`  | Dados inválidos (ex.: nome vazio, idade negativa, lista de cursos vazia)        |
+| `400`  | Campos que não existem no DTO foram enviados                                    |
+| `400`  | `page` ou `limit` não são números inteiros                                      |
 | `404`  | Aluno com o ID informado não foi encontrado (ou está removido, na busca por ID) |
-| `404`  | Restauração de um ID que não existe                                      |
-| `409`  | Já existe um aluno cadastrado com a mesma matrícula                      |
-| `500`  | Falha inesperada ao processar o cadastro do aluno                        |
+| `404`  | Restauração de um ID que não existe                                             |
+| `409`  | Já existe um aluno cadastrado com a mesma matrícula                             |
+| `500`  | Falha inesperada ao processar o cadastro do aluno                               |
 
 Exemplo de erro de validação:
 
@@ -273,13 +325,14 @@ npm run test:e2e
 
 ## Scripts úteis
 
-| Script               | Descrição                      |
-| -------------------- | ------------------------------ |
-| `npm run start:dev`  | Inicia em modo desenvolvimento |
-| `npm run build`      | Compila o projeto para `dist/` |
-| `npm run start:prod` | Executa a versão compilada     |
-| `npm run test`       | Executa os testes unitários    |
-| `npm run test:e2e`   | Executa os testes e2e          |
+| Script               | Descrição                                      |
+| -------------------- | ---------------------------------------------- |
+| `npm run start:dev`  | Inicia em modo desenvolvimento                 |
+| `npm run build`      | Compila o projeto para `dist/`                 |
+| `npm run start:prod` | Executa a versão compilada                     |
+| `npm run bf67`       | Popula o banco com alunos fictícios (seed)     |
+| `npm run test`       | Executa os testes unitários                    |
+| `npm run test:e2e`   | Executa os testes e2e                          |
 
 ## Autor
 
