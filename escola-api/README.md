@@ -7,6 +7,7 @@ API REST para gerenciamento de alunos, construída com **NestJS**, **MongoDB** (
 - [NestJS](https://nestjs.com/): framework Node.js
 - [TypeScript](https://www.typescriptlang.org/)
 - [MongoDB](https://www.mongodb.com/) com [Mongoose](https://mongoosejs.com/) (`@nestjs/mongoose`)
+- [@nestjs/config](https://docs.nestjs.com/techniques/configuration) e [Joi](https://joi.dev/): variáveis de ambiente com validação
 - [class-validator](https://github.com/typestack/class-validator) e class-transformer: validação dos dados de entrada
 - [Swagger](https://swagger.io/) (`@nestjs/swagger`): documentação interativa da API
 - [Faker](https://fakerjs.dev/) (`@faker-js/faker`): geração de dados fictícios para testes
@@ -28,17 +29,43 @@ cd escola-api
 
 # instalar as dependências
 npm install
+
+# criar o arquivo de variáveis de ambiente a partir do modelo
+cp .env.example .env        # Linux/macOS
+copy .env.example .env      # Windows (cmd)
 ```
 
-## Configuração
+Depois de criar o `.env`, ajuste os valores (principalmente a `JWT_SECRET`) conforme a seção abaixo.
 
-A conexão com o banco está definida em `src/app.module.ts`:
+## Variáveis de ambiente
 
+A configuração é lida do arquivo `.env`, na raiz do projeto. Esse arquivo **não é versionado**, porque contém dados sensíveis. O modelo com os nomes das variáveis fica em `.env.example`.
+
+| Variável       | Obrigatória | Padrão        | Descrição                                                  |
+| -------------- | :---------: | ------------- | ---------------------------------------------------------- |
+| `NODE_ENV`     | Não         | `development` | Ambiente de execução: `development`, `production` ou `test` |
+| `PORT`         | Não         | `3000`        | Porta em que a API sobe                                    |
+| `DATABASE_URI` | Sim         | —             | String de conexão com o MongoDB                            |
+| `JWT_SECRET`   | Sim         | —             | Chave secreta para assinatura de tokens JWT                |
+
+Exemplo (`.env.example`):
+
+```dotenv
+NODE_ENV=development
+PORT=3001
+DATABASE_URI=mongodb://localhost:27017/escola_dbn
+JWT_SECRET=troque-por-uma-chave-secreta-longa
 ```
-mongodb://localhost:27017/escola_dbn
+
+As variáveis são validadas com **Joi** quando a aplicação inicia (`src/app.module.ts`). Se `DATABASE_URI` ou `JWT_SECRET` estiverem ausentes, ou se `NODE_ENV` tiver um valor inválido, a API **não sobe** e mostra o erro de validação.
+
+Para gerar uma `JWT_SECRET` segura:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-A porta da aplicação é `3000` por padrão e pode ser alterada pela variável de ambiente `PORT`.
+> Nunca versione o `.env` nem publique a `JWT_SECRET`. Use uma chave diferente em cada ambiente.
 
 ## Executando o projeto
 
@@ -51,15 +78,17 @@ npm run build
 npm run start:prod
 ```
 
-A API ficará disponível em `http://localhost:3000`.
+A API ficará disponível na porta definida em `PORT` (por exemplo, `http://localhost:3001`).
 
 ## Documentação (Swagger)
 
 Com a aplicação rodando, a documentação interativa fica em:
 
 ```
-http://localhost:3000/docs
+http://localhost:<PORT>/api
 ```
+
+Por exemplo, com `PORT=3001`: `http://localhost:3001/api`.
 
 Por ela é possível consultar todas as rotas, ver os campos esperados (com exemplos) e executar as requisições direto no navegador.
 
@@ -67,7 +96,7 @@ Por ela é possível consultar todas as rotas, ver os campos esperados (com exem
 
 O script `src/seeding.ts` gera alunos fictícios com o `@faker-js/faker` (em português do Brasil) e os cadastra pelo `AlunosService`. Assim, os dados passam pelas mesmas regras da API, como a matrícula única.
 
-Com o MongoDB rodando, execute:
+Com o MongoDB rodando e o `.env` configurado, execute:
 
 ```bash
 npm run bf67
@@ -118,10 +147,13 @@ escola-api/
 │   │   ├── aluno.controller.ts         # rotas HTTP e documentação Swagger
 │   │   ├── alunos.module.ts            # módulo de alunos
 │   │   └── alunos.service.ts           # regras de negócio (CRUD, filtros, ordenação, paginação e soft delete)
-│   ├── app.module.ts                   # módulo raiz e conexão com o banco
-│   ├── main.ts                         # ponto de entrada da aplicação
+│   ├── config/
+│   │   └── env.config.ts               # configuração das variáveis de ambiente
+│   ├── app.module.ts                   # módulo raiz, variáveis de ambiente (Joi) e conexão com o banco
+│   ├── main.ts                         # ponto de entrada: ValidationPipe, Swagger e inicialização
 │   └── seeding.ts                      # script que popula o banco com alunos fictícios
 ├── test/                               # testes e2e
+├── .env.example                        # modelo das variáveis de ambiente
 ├── vitest.config.ts
 ├── vitest.config.e2e.ts
 └── nest-cli.json
