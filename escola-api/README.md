@@ -7,7 +7,7 @@ API REST para gerenciamento de alunos, construída com **NestJS**, **MongoDB** (
 - [NestJS](https://nestjs.com/): framework Node.js
 - [TypeScript](https://www.typescriptlang.org/)
 - [MongoDB](https://www.mongodb.com/) com [Mongoose](https://mongoosejs.com/) (`@nestjs/mongoose`)
-- [@nestjs/config](https://docs.nestjs.com/techniques/configuration) e [Joi](https://joi.dev/): variáveis de ambiente com validação
+- [@nestjs/config](https://docs.nestjs.com/techniques/configuration) e [Joi](https://joi.dev/): variáveis de ambiente tipadas e validadas
 - [class-validator](https://github.com/typestack/class-validator) e class-transformer: validação dos dados de entrada
 - [Swagger](https://swagger.io/) (`@nestjs/swagger`): documentação interativa da API
 - [Faker](https://fakerjs.dev/) (`@faker-js/faker`): geração de dados fictícios para testes
@@ -41,12 +41,14 @@ Depois de criar o `.env`, ajuste os valores (principalmente a `JWT_SECRET`) conf
 
 A configuração é lida do arquivo `.env`, na raiz do projeto. Esse arquivo **não é versionado**, porque contém dados sensíveis. O modelo com os nomes das variáveis fica em `.env.example`.
 
-| Variável       | Obrigatória | Padrão        | Descrição                                                  |
-| -------------- | :---------: | ------------- | ---------------------------------------------------------- |
-| `NODE_ENV`     | Não         | `development` | Ambiente de execução: `development`, `production` ou `test` |
-| `PORT`         | Não         | `3000`        | Porta em que a API sobe                                    |
-| `DATABASE_URI` | Sim         | —             | String de conexão com o MongoDB                            |
-| `JWT_SECRET`   | Sim         | —             | Chave secreta para assinatura de tokens JWT                |
+| Variável         | Obrigatória | Padrão                                | Descrição                                                   |
+| ---------------- | :---------: | ------------------------------------- | ----------------------------------------------------------- |
+| `NODE_ENV`       | Não         | `development`                         | Ambiente de execução: `development`, `production` ou `test` |
+| `PORT`           | Não         | `3000`                                | Porta em que a API sobe                                     |
+| `DATABASE_URI`   | Sim         | —                                     | String de conexão com o MongoDB                             |
+| `MAX_POOL_SIZE`  | Não         | `10`                                  | Número máximo de conexões abertas com o banco               |
+| `JWT_SECRET`     | Sim         | —                                     | Chave secreta para assinatura de tokens JWT                 |
+| `JWT_EXPIRES_IN` | Não         | `1d`                                  | Tempo de validade dos tokens JWT                            |
 
 Exemplo (`.env.example`):
 
@@ -54,10 +56,12 @@ Exemplo (`.env.example`):
 NODE_ENV=development
 PORT=3001
 DATABASE_URI=mongodb://localhost:27017/escola_dbn
+MAX_POOL_SIZE=10
 JWT_SECRET=troque-por-uma-chave-secreta-longa
+JWT_EXPIRES_IN=1d
 ```
 
-As variáveis são validadas com **Joi** quando a aplicação inicia (`src/app.module.ts`). Se `DATABASE_URI` ou `JWT_SECRET` estiverem ausentes, ou se `NODE_ENV` tiver um valor inválido, a API **não sobe** e mostra o erro de validação.
+Na inicialização, o **Joi** valida `NODE_ENV`, `PORT`, `DATABASE_URI` e `JWT_SECRET` (`src/app.module.ts`). Se `DATABASE_URI` ou `JWT_SECRET` estiverem ausentes, ou se `NODE_ENV` tiver um valor inválido, a API **não sobe** e mostra o erro de validação. `MAX_POOL_SIZE` e `JWT_EXPIRES_IN` não passam pelo Joi: quando ausentes, valem os padrões da tabela.
 
 Para gerar uma `JWT_SECRET` segura:
 
@@ -66,6 +70,51 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
 > Nunca versione o `.env` nem publique a `JWT_SECRET`. Use uma chave diferente em cada ambiente.
+
+## Configuração tipada (namespaces)
+
+Em vez de ler `process.env` espalhado pelo código, as variáveis são agrupadas em **namespaces** com `registerAs` e carregadas pelo `ConfigModule` (opção `load`):
+
+| Arquivo                       | Namespace  | Valores expostos                                          |
+| ----------------------------- | ---------- | --------------------------------------------------------- |
+| `src/config/database.config.ts` | `database` | `uri` (`DATABASE_URI`) e `maxPoolSize` (`MAX_POOL_SIZE`)  |
+| `src/config/auth.config.ts`     | `auth`     | `jwtSecret` (`JWT_SECRET`) e `jwtExpiresIn` (`JWT_EXPIRES_IN`) |
+| `src/config/env.config.ts`      | —          | Interface `variaveisDeAmbiente`, que tipa o `ConfigService` |
+
+Exemplo de namespace (`database.config.ts`):
+
+```typescript
+import { registerAs } from "@nestjs/config";
+
+export default registerAs('database', () => ({
+    uri: process.env.DATABASE_URI || 'mongodb://localhost:27017/escola_dbn',
+    maxPoolSize: parseInt(process.env.MAX_POOL_SIZE || '10', 10),
+}));
+```
+
+A conexão com o MongoDB usa essa configuração tipada, com `forRootAsync` e `inject: [databaseConfig.KEY]`:
+
+```typescript
+MongooseModule.forRootAsync({
+  imports: [ConfigModule],
+  useFactory: (dbConfig: ConfigType<typeof databaseConfig>) => ({
+    uri: dbConfig.uri,
+    maxPoolSize: dbConfig.maxPoolSize,
+  }),
+  inject: [databaseConfig.KEY],
+}),
+```
+
+Em qualquer provider, a configuração pode ser injetada com tipagem completa:
+
+```typescript
+constructor(
+  @Inject(databaseConfig.KEY)
+  private dbConfig: ConfigType<typeof databaseConfig>,
+) {}
+```
+
+Para ler variáveis individuais, o `ConfigService<variaveisDeAmbiente, true>` também está disponível, com `infer: true` para manter os tipos.
 
 ## Executando o projeto
 
@@ -148,8 +197,10 @@ escola-api/
 │   │   ├── alunos.module.ts            # módulo de alunos
 │   │   └── alunos.service.ts           # regras de negócio (CRUD, filtros, ordenação, paginação e soft delete)
 │   ├── config/
-│   │   └── env.config.ts               # configuração das variáveis de ambiente
-│   ├── app.module.ts                   # módulo raiz, variáveis de ambiente (Joi) e conexão com o banco
+│   │   ├── auth.config.ts              # namespace "auth" (JWT)
+│   │   ├── database.config.ts          # namespace "database" (URI e pool de conexões)
+│   │   └── env.config.ts               # interface tipada das variáveis de ambiente
+│   ├── app.module.ts                   # módulo raiz: ConfigModule (Joi + namespaces) e conexão com o banco
 │   ├── main.ts                         # ponto de entrada: ValidationPipe, Swagger e inicialização
 │   └── seeding.ts                      # script que popula o banco com alunos fictícios
 ├── test/                               # testes e2e
